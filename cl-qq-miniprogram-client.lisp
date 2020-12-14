@@ -86,7 +86,7 @@
                               &key (uri "/sns/jscode2session"))
   "Parameters:
     js-code: js_code from 
-  Return session\(jsown) like this:
+  Return session\(jsown\) like this:
   \(:OBJ \
      \(\"session_key\" . \"xxxxx\"\)
      \(\"openid\" . \"yyyyy\"\)
@@ -94,9 +94,22 @@
   Note: unionid will be contained in response only after binding miniprogram to WeChat Dev Platform account.
   API doc of code2Session: https://q.qq.com/wiki/develop/game/server/open-port/login.html#code2session
   API doc about login: https://q.qq.com/wiki/develop/game/frame/open-ability/login.html"
-  (wxa:auth-code2session client
-                         js-code
-                         :uri uri))
+  (multiple-value-bind (data status-code headers uri stream must-close-p status-text)
+      (drakma:http-request (format nil "~A://~A~A"
+                                   (protocol client)
+                                   (host client)
+                                   uri)
+                           :parameters (list (cons "grant_type" "authorization_code")
+                                             (cons "appid" (app-id client))
+                                             (cons "secret" (app-secret client))
+                                             (cons "js_code" js-code)))
+    (declare (ignore headers uri stream must-close-p status-text))
+    (let ((json (jsown:parse (if (stringp data)
+                                 data
+                                 (babel:octets-to-string data :encoding :utf-8)))))
+      (if (eq 200 status-code)
+          (values json status-code)
+          (values nil status-code)))))
 
 (defmethod security-img-sec-check ((client qq-miniprogram-client)
                                    pathname
