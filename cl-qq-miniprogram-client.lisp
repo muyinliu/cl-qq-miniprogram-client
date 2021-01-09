@@ -11,13 +11,17 @@
                                 &key
                                   (protocol +qq-api-protocol+)
                                   (host +qq-api-host+)
-                                  (uri "/api/getToken"))
+                                  (uri "/api/getToken")
+                                  proxy
+                                  proxy-basic-authorization)
   "Return access_token\(string\).
   API doc of getAccessToken: https://q.qq.com/wiki/develop/miniprogram/server/open_port/port_use.html#getaccesstoken"
   (wxa:wechat-api-get-access-token app-id app-secret
                                    :protocol protocol
                                    :host host
-                                   :uri uri))
+                                   :uri uri
+                                   :proxy proxy
+                                   :proxy-basic-authorization proxy-basic-authorization))
 
 (defclass qq-miniprogram-client ()
   ((protocol
@@ -43,14 +47,27 @@
    (auto-refresh-access-token-p
     :initarg :auto-refresh-access-token-p
     :initform t
-    :reader auto-refresh-access-token-p)))
+    :reader auto-refresh-access-token-p)
+   (proxy
+    :initarg :proxy
+    :initform nil
+    :accessor proxy
+    :documentation "e.g. '\(\"127.0.0.1\" 8080\)")
+   (proxy-basic-authorization
+    :initarg :proxy-basic-authorization
+    :initform nil
+    :accessor proxy-basic-authorization
+    :documentation "e.g. '\(\"username\" \"password\"\)")))
 
 (defmethod initialize-instance :after ((client qq-miniprogram-client) &rest args)
   (declare (ignore args))
   (flet ((init-access-token ()
            (setf (slot-value client 'access-token)
-                 (qq-api-get-access-token (app-id client)
-                                          (app-secret client)))))
+                 (qq-api-get-access-token
+                  (app-id client)
+                  (app-secret client)
+                  :proxy (proxy client)
+                  :proxy-basic-authorization (proxy-basic-authorization client)))))
     (init-access-token)
     (when (slot-value client 'auto-refresh-access-token-p)
       ;; refresh access-token every hour
@@ -67,13 +84,17 @@
                                    &key
                                      (protocol +qq-api-protocol+)
                                      (host +qq-api-host+)
-                                     (auto-refresh-access-token-p t))
+                                     (auto-refresh-access-token-p t)
+                                     proxy
+                                     proxy-basic-authorization)
   (make-instance 'qq-miniprogram-client
                  :protocol protocol
                  :host host
                  :app-id app-id
                  :app-secret app-secret
-                 :auto-refresh-access-token-p auto-refresh-access-token-p))
+                 :auto-refresh-access-token-p auto-refresh-access-token-p
+                 :proxy proxy
+                 :proxy-basic-authorization proxy-basic-authorization))
 
 (defmethod print-object ((client qq-miniprogram-client) stream)
   (print-unreadable-object (client stream :type t :identity t)
@@ -102,7 +123,9 @@
                            :parameters (list (cons "grant_type" "authorization_code")
                                              (cons "appid" (app-id client))
                                              (cons "secret" (app-secret client))
-                                             (cons "js_code" js-code)))
+                                             (cons "js_code" js-code))
+                           :proxy (proxy client)
+                           :proxy-basic-authorization (proxy-basic-authorization client))
     (declare (ignore headers uri stream must-close-p status-text))
     (let ((json (jsown:parse (if (stringp data)
                                  data
@@ -125,7 +148,9 @@
                                    app-id)
                            :method :post
                            :content-type "multipart/form-data" 
-                           :parameters (list (list "media" pathname)))
+                           :parameters (list (list "media" pathname))
+                           :proxy (proxy client)
+                           :proxy-basic-authorization (proxy-basic-authorization client))
     (declare (ignore headers uri stream must-close-p status-text))
     (when (eq 200 status-code)
       (let ((response (jsown:parse (babel:octets-to-string data :encoding :utf-8))))
